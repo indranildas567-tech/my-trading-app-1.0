@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ORB Camarilla Trading App</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+        }
+
+        header {
+            background: #1e293b;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 26px;
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .level {
+            background: #334155;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .level strong {
+            display: block;
+            font-size: 20px;
+            margin-top: 8px;
+        }
+
+        .r3 {
+            border-left: 5px solid #ef4444;
+        }
+
+        .s3 {
+            border-left: 5px solid #22c55e;
+        }
+
+        .orb {
+            border-left: 5px solid #3b82f6;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        #status {
+            margin-top: 15px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>📊 ORB + Camarilla Trading App</h1>
+</header>
+
+<div class="container">
+
+    <div class="card">
+        <h2>Trading Levels</h2>
+
+        <div class="levels">
+
+            <div class="level r3">
+                <span>Camarilla R3</span>
+                <strong id="r3">--</strong>
+            </div>
+
+            <div class="level s3">
+                <span>Camarilla S3</span>
+                <strong id="s3">--</strong>
+            </div>
+
+            <div class="level orb">
+                <span>ORB High</span>
+                <strong id="orbHigh">--</strong>
+            </div>
+
+            <div class="level orb">
+                <span>ORB Low</span>
+                <strong id="orbLow">--</strong>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Test Calculation</h2>
+
+        <p>
+            Enter previous day's High, Low and Close:
+        </p>
+
+        <input id="high" type="number" placeholder="High">
+        <input id="low" type="number" placeholder="Low">
+        <input id="close" type="number" placeholder="Close">
+
+        <br><br>
+
+        <button onclick="calculateLevels()">
+            Calculate Levels
+        </button>
+
+        <div id="status"></div>
+    </div>
+
+</div>
+
+<script>
+
+function calculateLevels() {
+
+    const high = parseFloat(document.getElementById("high").value);
+    const low = parseFloat(document.getElementById("low").value);
+    const close = parseFloat(document.getElementById("close").value);
+
+    if (isNaN(high) || isNaN(low) || isNaN(close)) {
+
+        document.getElementById("status").innerText =
+            "Please enter High, Low and Close.";
+
+        return;
+    }
+
+    const range = high - low;
+
+    // Camarilla Pivot R3
+    const r3 = close + (range * 1.1 / 4);
+
+    // Camarilla Pivot S3
+    const s3 = close - (range * 1.1 / 4);
+
+    document.getElementById("r3").innerText =
+        r3.toFixed(2);
+
+    document.getElementById("s3").innerText =
+        s3.toFixed(2);
+
+    document.getElementById("status").innerText =
+        "Camarilla R3 and S3 calculated successfully.";
+
+}
+
+</script>
+
+</body>
+</html>
