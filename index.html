@@ -3,126 +3,160 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>ORB + Camarilla Trading App</title>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        background: #f4f6f8;
-        margin: 0;
-        padding: 20px;
-    }
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    margin: 0;
+    padding: 20px;
+}
 
-    .container {
-        max-width: 900px;
-        margin: auto;
-    }
+.container {
+    max-width: 950px;
+    margin: auto;
+}
 
-    h1 {
-        text-align: center;
-        color: #222;
-    }
+h1 {
+    text-align: center;
+    color: #222;
+}
 
-    .card {
-        background: white;
-        padding: 20px;
-        margin-top: 20px;
-        border-radius: 12px;
-        box-shadow: 0 3px 12px rgba(0,0,0,0.10);
-    }
+.card {
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 12px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.10);
+}
 
-    .grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
-    }
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
 
-    label {
-        font-weight: bold;
-        display: block;
-        margin-bottom: 6px;
-    }
+label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 6px;
+}
 
-    input {
-        width: 100%;
-        padding: 10px;
-        box-sizing: border-box;
-        border: 1px solid #ccc;
-        border-radius: 6px;
-        font-size: 16px;
-    }
+input {
+    width: 100%;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+}
 
-    button {
-        width: 100%;
-        padding: 13px;
-        margin-top: 20px;
-        background: #1976d2;
-        color: white;
-        border: none;
-        border-radius: 7px;
-        font-size: 17px;
-        cursor: pointer;
-    }
+button {
+    width: 100%;
+    padding: 13px;
+    margin-top: 20px;
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 7px;
+    font-size: 17px;
+    cursor: pointer;
+}
 
-    button:hover {
-        background: #125ca5;
-    }
+button:hover {
+    background: #125ca5;
+}
 
-    .results {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-top: 20px;
-    }
+.results {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 20px;
+}
 
-    .result {
-        padding: 15px;
-        background: #eef3f8;
-        border-radius: 8px;
-        text-align: center;
-    }
+.result {
+    padding: 15px;
+    background: #eef3f8;
+    border-radius: 8px;
+    text-align: center;
+}
 
-    .result strong {
-        display: block;
-        font-size: 14px;
-        margin-bottom: 5px;
-    }
+.result strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
 
-    .result span {
-        font-size: 20px;
-        font-weight: bold;
-    }
+.result span {
+    font-size: 20px;
+    font-weight: bold;
+}
 
-    .signal {
-        margin-top: 20px;
-        padding: 18px;
-        text-align: center;
-        border-radius: 8px;
-        font-size: 24px;
-        font-weight: bold;
-    }
+.trade-results {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 20px;
+}
 
-    .buy {
-        background: #d4edda;
-        color: #155724;
-    }
+.trade-box {
+    padding: 18px;
+    background: #eef3f8;
+    border-radius: 8px;
+    text-align: center;
+}
 
-    .sell {
-        background: #f8d7da;
-        color: #721c24;
-    }
+.trade-box strong {
+    display: block;
+    margin-bottom: 8px;
+}
 
-    .wait {
-        background: #fff3cd;
-        color: #856404;
-    }
+.trade-box span {
+    font-size: 21px;
+    font-weight: bold;
+}
 
-    @media(max-width:600px) {
-        .grid,
-        .results {
-            grid-template-columns: 1fr;
-        }
+.signal {
+    margin-top: 20px;
+    padding: 18px;
+    text-align: center;
+    border-radius: 8px;
+    font-size: 26px;
+    font-weight: bold;
+}
+
+.buy {
+    background: #d4edda;
+    color: #155724;
+}
+
+.sell {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.wait {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.note {
+    text-align: center;
+    color: #666;
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+@media(max-width:700px) {
+
+    .grid,
+    .results,
+    .trade-results {
+        grid-template-columns: 1fr;
     }
+}
 </style>
 </head>
 
@@ -134,101 +168,141 @@
 
 <div class="card">
 
-    <h2>Market Data</h2>
+<h2>Market Data</h2>
 
-    <div class="grid">
+<div class="grid">
 
-        <div>
-            <label>Previous High</label>
-            <input type="number" id="high" step="0.01">
-        </div>
+<div>
+<label>Previous High</label>
+<input type="number" id="high" step="0.01">
+</div>
 
-        <div>
-            <label>Previous Low</label>
-            <input type="number" id="low" step="0.01">
-        </div>
+<div>
+<label>Previous Low</label>
+<input type="number" id="low" step="0.01">
+</div>
 
-        <div>
-            <label>Previous Close</label>
-            <input type="number" id="close" step="0.01">
-        </div>
+<div>
+<label>Previous Close</label>
+<input type="number" id="close" step="0.01">
+</div>
 
-        <div>
-            <label>Current Price</label>
-            <input type="number" id="price" step="0.01">
-        </div>
+<div>
+<label>Current Price</label>
+<input type="number" id="price" step="0.01">
+</div>
 
-        <div>
-            <label>ORB High</label>
-            <input type="number" id="orbHigh" step="0.01">
-        </div>
+<div>
+<label>ORB High</label>
+<input type="number" id="orbHigh" step="0.01">
+</div>
 
-        <div>
-            <label>ORB Low</label>
-            <input type="number" id="orbLow" step="0.01">
-        </div>
-
-    </div>
-
-    <button onclick="calculate()">Calculate</button>
+<div>
+<label>ORB Low</label>
+<input type="number" id="orbLow" step="0.01">
+</div>
 
 </div>
+
+<button onclick="calculate()">Calculate</button>
+
+</div>
+
 
 <div class="card">
 
-    <h2>📊 Camarilla Levels</h2>
+<h2>📊 Camarilla Levels</h2>
 
-    <div class="results">
+<div class="results">
 
-        <div class="result">
-            <strong>R3</strong>
-            <span id="r3">-</span>
-        </div>
+<div class="result">
+<strong>R3</strong>
+<span id="r3">-</span>
+</div>
 
-        <div class="result">
-            <strong>R4</strong>
-            <span id="r4">-</span>
-        </div>
+<div class="result">
+<strong>R4</strong>
+<span id="r4">-</span>
+</div>
 
-        <div class="result">
-            <strong>S3</strong>
-            <span id="s3">-</span>
-        </div>
+<div class="result">
+<strong>S3</strong>
+<span id="s3">-</span>
+</div>
 
-        <div class="result">
-            <strong>S4</strong>
-            <span id="s4">-</span>
-        </div>
-
-    </div>
+<div class="result">
+<strong>S4</strong>
+<span id="s4">-</span>
+</div>
 
 </div>
+
+</div>
+
 
 <div class="card">
 
-    <h2>🎯 ORB Levels</h2>
+<h2>🎯 ORB Levels</h2>
 
-    <div class="results">
+<div class="results">
 
-        <div class="result">
-            <strong>ORB High</strong>
-            <span id="showOrbHigh">-</span>
-        </div>
+<div class="result">
+<strong>ORB High</strong>
+<span id="showOrbHigh">-</span>
+</div>
 
-        <div class="result">
-            <strong>ORB Low</strong>
-            <span id="showOrbLow">-</span>
-        </div>
-
-    </div>
+<div class="result">
+<strong>ORB Low</strong>
+<span id="showOrbLow">-</span>
+</div>
 
 </div>
+
+</div>
+
+
+<div class="card">
+
+<h2>💰 Trade Plan</h2>
+
+<div class="trade-results">
+
+<div class="trade-box">
+<strong>Entry</strong>
+<span id="entry">-</span>
+</div>
+
+<div class="trade-box">
+<strong>Stop Loss</strong>
+<span id="stopLoss">-</span>
+</div>
+
+<div class="trade-box">
+<strong>Target 1</strong>
+<span id="target1">-</span>
+</div>
+
+<div class="trade-box">
+<strong>Target 2</strong>
+<span id="target2">-</span>
+</div>
+
+</div>
+
+<p class="note">
+Targets use a 1:1 and 1:2 risk/reward calculation.
+</p>
+
+</div>
+
 
 <div id="signal" class="signal wait">
-    WAIT
+WAIT ⏳
 </div>
 
+
 </div>
+
 
 <script>
 
@@ -255,7 +329,8 @@ function calculate() {
 
     const range = high - low;
 
-    // Camarilla formulas
+    // Camarilla calculations
+
     const r3 = close + (range * 1.1 / 4);
     const r4 = close + (range * 1.1 / 2);
 
@@ -273,26 +348,88 @@ function calculate() {
     document.getElementById("showOrbLow").innerText =
         orbLow.toFixed(2);
 
+
     const signal = document.getElementById("signal");
 
     signal.className = "signal wait";
 
-    // ORB + Camarilla logic
+    /*
+       BUY:
+       Price breaks ORB High
+       AND price is above Camarilla R3
+    */
+
     if (price > orbHigh && price > r3) {
 
         signal.innerText = "BUY 🚀";
         signal.className = "signal buy";
 
-    } else if (price < orbLow && price < s3) {
+        const entry = orbHigh;
+
+        const stopLoss = orbLow;
+
+        const risk = entry - stopLoss;
+
+        const target1 = entry + risk;
+        const target2 = entry + (risk * 2);
+
+        document.getElementById("entry").innerText =
+            entry.toFixed(2);
+
+        document.getElementById("stopLoss").innerText =
+            stopLoss.toFixed(2);
+
+        document.getElementById("target1").innerText =
+            target1.toFixed(2);
+
+        document.getElementById("target2").innerText =
+            target2.toFixed(2);
+    }
+
+
+    /*
+       SELL:
+       Price breaks ORB Low
+       AND price is below Camarilla S3
+    */
+
+    else if (price < orbLow && price < s3) {
 
         signal.innerText = "SELL 🔻";
         signal.className = "signal sell";
 
-    } else {
+        const entry = orbLow;
+
+        const stopLoss = orbHigh;
+
+        const risk = stopLoss - entry;
+
+        const target1 = entry - risk;
+        const target2 = entry - (risk * 2);
+
+        document.getElementById("entry").innerText =
+            entry.toFixed(2);
+
+        document.getElementById("stopLoss").innerText =
+            stopLoss.toFixed(2);
+
+        document.getElementById("target1").innerText =
+            target1.toFixed(2);
+
+        document.getElementById("target2").innerText =
+            target2.toFixed(2);
+    }
+
+
+    else {
 
         signal.innerText = "WAIT ⏳";
         signal.className = "signal wait";
 
+        document.getElementById("entry").innerText = "-";
+        document.getElementById("stopLoss").innerText = "-";
+        document.getElementById("target1").innerText = "-";
+        document.getElementById("target2").innerText = "-";
     }
 
 }
