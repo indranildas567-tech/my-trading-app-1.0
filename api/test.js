@@ -1,36 +1,40 @@
+
 export default async function handler(req, res) {
+  const token = process.env.UPSTOX_ACCESS_TOKEN;
+
+  if (!token) {
+    return res.status(500).json({
+      ok: false,
+      message: "UPSTOX_ACCESS_TOKEN is not configured"
+    });
+  }
+
   try {
-    const token = process.env.UPSTOX_ACCESS_TOKEN;
+    const url =
+      "https://api.upstox.com/v2/market-quote/ohlc?instrument_key=NSE_EQ%7CINE669E01016&interval=1d";
 
-    if (!token) {
-      return res.status(500).json({
-        ok: false,
-        message: "UPSTOX_ACCESS_TOKEN is not configured"
-      });
-    }
-
-    const response = await fetch(
-      "https://api.upstox.com/v2/user/profile",
-      {
-        method: "GET",
-        headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`
       }
-    );
+    });
 
     const data = await response.json();
 
     return res.status(response.status).json({
       ok: response.ok,
-      data: data
+      message: response.ok
+        ? "Upstox market data connection successful"
+        : "Upstox market data request failed",
+      data
     });
-
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      message: error.message
+      message: "Backend request failed",
+      error: error.message
     });
   }
 }
