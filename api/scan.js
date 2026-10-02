@@ -1,4 +1,5 @@
 
+
 export default function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -20,6 +21,7 @@ export default function handler(req, res) {
     message: "NIFTY 500 scanner backend is ready for integration",
     matches: [],
     scannerConfigured: false,
-    condition: "S3 < ORB Low < ORB High < R3"
+    condition: "S3 < ORB Low < ORB High < R3",
+    openingRange: "09:15–09:30 IST"
   });
 }
