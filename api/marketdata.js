@@ -18,9 +18,8 @@ export default async function handler(req, res) {
   try {
     const instrumentKey = "NSE_EQ|INE466L01038";
 
-    // Today's 1-minute candles
-    const intradayResponse = await fetch(
-      `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/minutes/1`,
+    const response = await fetch(
+      `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/2026-10-05/2026-10-01`,
       {
         headers: {
           Accept: "application/json",
@@ -29,32 +28,31 @@ export default async function handler(req, res) {
       }
     );
 
-    const intradayData = await intradayResponse.json();
+    const data = await response.json();
 
-    if (!intradayResponse.ok) {
-      return res.status(intradayResponse.status).json({
+    if (!response.ok) {
+      return res.status(response.status).json({
         ok: false,
-        message: "Intraday candle request failed",
-        data: intradayData
+        message: "Historical candle request failed",
+        data
       });
     }
 
-    const candles = intradayData.data?.candles || [];
+    const candles = data.data?.candles || [];
 
     return res.status(200).json({
       ok: true,
-      status: "market_data_test_success",
+      status: "historical_data_test_success",
       symbol: "360ONE",
       instrumentKey,
       candleCount: candles.length,
-      firstFiveCandles: candles.slice(0, 5),
-      lastFiveCandles: candles.slice(-5)
+      candles: candles.slice(0, 5)
     });
 
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      message: "Market data test failed",
+      message: "Historical data test failed",
       error: error.message
     });
   }
