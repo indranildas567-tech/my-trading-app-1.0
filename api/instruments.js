@@ -1,5 +1,3 @@
-import { gunzipSync } from "zlib";
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -8,81 +6,53 @@ export default async function handler(req, res) {
     });
   }
 
+  const token = process.env.UPSTOX_ACCESS_TOKEN;
+
+  if (!token) {
+    return res.status(500).json({
+      ok: false,
+      message: "Upstox token is not configured"
+    });
+  }
+
   try {
-    // Download Upstox NSE instrument file
+    const instrumentKey = "NSE_EQ|INE466L01038";
+
     const response = await fetch(
-      "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+      `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(instrumentKey)}/days/1/2026-10-05/2026-10-01`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      }
     );
 
+    const data = await response.json();
+
     if (!response.ok) {
-      return res.status(502).json({
+      return res.status(response.status).json({
         ok: false,
-        message: "Unable to download Upstox NSE instrument file"
+        message: "Historical candle request failed",
+        data
       });
     }
 
-    // Convert downloaded file to buffer
-    const compressedBuffer = Buffer.from(
-      await response.arrayBuffer()
-    );
-
-    // Decompress the .gz file
-    const decompressedBuffer = gunzipSync(compressedBuffer);
-
-    // Convert to JSON
-    const instruments = JSON.parse(
-      decompressedBuffer.toString("utf8")
-    );
-
-    // Keep only NSE equity instruments
-    const equityInstruments = instruments.filter(
-      item =>
-        item.segment === "NSE_EQ" &&
-        item.instrument_type === "EQ"
-    );
-
-    // Find a few well-known stocks as a test
-    const testSymbols = [
-      "360ONE",
-      "RELIANCE",
-      "TCS",
-      "INFY"
-    ];
-
-    const testResults = testSymbols.map(symbol => {
-      const match = equityInstruments.find(
-        item => item.trading_symbol === symbol
-      );
-
-      if (!match) {
-        return {
-          symbol,
-          found: false
-        };
-      }
-
-      return {
-        symbol,
-        found: true,
-        instrumentKey: match.instrument_key,
-        tradingSymbol: match.trading_symbol,
-        segment: match.segment,
-        instrumentType: match.instrument_type
-      };
-    });
+    const candles = data.data?.candles || [];
 
     return res.status(200).json({
       ok: true,
-      status: "upstox_instruments_loaded",
-      totalInstruments: instruments.length,
-      nseEquityCount: equityInstruments.length,
-      testResults
+      status: "historical_data_test_success",
+      symbol: "360ONE",
+      instrumentKey,
+      candleCount: candles.length,
+      candles: candles.slice(0, 5)
     });
 
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      message: "Unable to process Upstox instrument file",
+      message: "Historical data test failed",
       error: error.message
     });
   }
