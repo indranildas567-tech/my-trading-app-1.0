@@ -52,7 +52,7 @@
     results.innerHTML = "";
 
     try {
-      const response = await fetch("/api/scan", {
+      const response = await fetch("/api/scan?limit=500", {
         method: "GET",
         headers: { "Accept": "application/json" }
       });
