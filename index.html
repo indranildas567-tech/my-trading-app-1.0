@@ -19,24 +19,51 @@
   </p>
 
   <div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;background:white;">
-      <thead>
-        <tr style="background:#dce8f5;">
-          <th style="padding:10px;border:1px solid #ccd5df;">Stock</th>
-          <th style="padding:10px;border:1px solid #ccd5df;">S3</th>
-          <th style="padding:10px;border:1px solid #ccd5df;">ORB Low</th>
-          <th style="padding:10px;border:1px solid #ccd5df;">ORB High</th>
-          <th style="padding:10px;border:1px solid #ccd5df;">R3</th>
-        </tr>
-      </thead>
-      <tbody id="scannerResults">
-        <tr>
-          <td colspan="5" style="padding:12px;text-align:center;">
-            No scan results yet.
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    html
+<div style="overflow-x:auto;">
+
+  <h3>Group 1 — Close Above ORB High</h3>
+  <table style="width:100%;border-collapse:collapse;background:white;">
+    <thead>
+      <tr style="background:#dce8f5;">
+        <th>Stock</th><th>9:30 Close</th><th>S3</th>
+        <th>ORB Low</th><th>ORB High</th><th>R3</th>
+      </tr>
+    </thead>
+    <tbody id="group1Results">
+      <tr><td colspan="6">No results yet.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Group 2 — Close Below ORB Low</h3>
+  <table style="width:100%;border-collapse:collapse;background:white;">
+    <thead>
+      <tr style="background:#dce8f5;">
+        <th>Stock</th><th>9:30 Close</th><th>S3</th>
+        <th>ORB Low</th><th>ORB High</th><th>R3</th>
+      </tr>
+    </thead>
+    <tbody id="group2Results">
+      <tr><td colspan="6">No results yet.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Group 3 — Close Between ORB Levels</h3>
+  <table style="width:100%;border-collapse:collapse;background:white;">
+    <thead>
+      <tr style="background:#dce8f5;">
+        <th>Stock</th><th>9:30 Close</th><th>S3</th>
+        <th>ORB Low</th><th>ORB High</th><th>R3</th>
+      </tr>
+    </thead>
+    <tbody id="group3Results">
+      <tr><td colspan="6">No results yet.</td></tr>
+    </tbody>
+  </table>
+
+</div>
+```
+
   </div>
 </section>
 
