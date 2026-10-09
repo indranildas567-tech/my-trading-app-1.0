@@ -19,8 +19,6 @@
   </p>
 
   <div style="overflow-x:auto;">
-    html
-<div style="overflow-x:auto;">
 
   <h3>Group 1 — Close Above ORB High</h3>
   <table style="width:100%;border-collapse:collapse;background:white;">
@@ -71,12 +69,16 @@
 (function () {
   const button = document.getElementById("scanNifty500Btn");
   const status = document.getElementById("scannerStatus");
-  const results = document.getElementById("scannerResults");
+  const group1Results = document.getElementById("group1Results");
+const group2Results = document.getElementById("group2Results");
+const group3Results = document.getElementById("group3Results");
 
   button.addEventListener("click", async function () {
     button.disabled = true;
     status.textContent = "Connecting to scanner...";
-    results.innerHTML = "";
+    group1Results.innerHTML = "";
+group2Results.innerHTML = "";
+group3Results.innerHTML = "";
 
     try {
       const response = await fetch("/api/scan?limit=500", {
@@ -95,37 +97,63 @@
       if (stocks.length === 0) {
         status.textContent = "Scan completed. No matching stocks found.";
         results.innerHTML =
-          '<tr><td colspan="5" style="padding:12px;text-align:center;">No matching stocks.</td></tr>';
+          group1Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
+group2Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
+group3Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
         return;
       }
 
       stocks.forEach(function (stock) {
-        const row = document.createElement("tr");
+  let target;
 
-        [
-          stock.symbol,
-          stock.s3,
-          stock.orbLow,
-          stock.orbHigh,
-          stock.r3
-        ].forEach(function (value) {
-          const cell = document.createElement("td");
-          cell.textContent = value ?? "—";
-          cell.style.padding = "10px";
-          cell.style.border = "1px solid #ccd5df";
-          cell.style.textAlign = "center";
-          row.appendChild(cell);
-        });
+  if (stock.group && stock.group.startsWith("Group 1")) {
+    target = group1Results;
+  } else if (stock.group && stock.group.startsWith("Group 2")) {
+    target = group2Results;
+  } else if (stock.group && stock.group.startsWith("Group 3")) {
+    target = group3Results;
+  } else {
+    return;
+  }
 
-        results.appendChild(row);
-      });
+  const row = document.createElement("tr");
+
+  [
+    stock.symbol,
+    stock.close930,
+    stock.s3,
+    stock.orbLow,
+    stock.orbHigh,
+    stock.r3
+  ].forEach(function (value) {
+    const cell = document.createElement("td");
+
+    cell.textContent =
+      typeof value === "number" ? value.toFixed(2) : (value ?? "—");
+
+    cell.style.padding = "10px";
+    cell.style.border = "1px solid #ccd5df";
+    cell.style.textAlign = "center";
+
+    row.appendChild(cell);
+  });
+
+  target.appendChild(row);
+});
+        
+        
+
+      
+    
 
       status.textContent = "Scan completed. Matching stocks: " + stocks.length;
 
     } catch (error) {
       status.textContent = "Scanner is not connected yet: " + error.message;
-      results.innerHTML =
-        '<tr><td colspan="5" style="padding:12px;text-align:center;">No results available.</td></tr>';
+      
+        group1Results.innerHTML = '<tr><td colspan="6">No results available.</td></tr>';
+      group2Results.innerHTML = '<tr><td colspan="6">No results available.</td></tr>';
+      group3Results.innerHTML = '<tr><td colspan="6">No results available.</td></tr>';
     } finally {
       button.disabled = false;
     }
