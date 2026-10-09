@@ -142,7 +142,17 @@ group3Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
 });
         
         
+if (group1Results.children.length === 0) {
+  group1Results.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;">No qualifying stocks in Group 1 today.</td></tr>';
+}
 
+if (group2Results.children.length === 0) {
+  group2Results.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;">No qualifying stocks in Group 2 today.</td></tr>';
+}
+
+if (group3Results.children.length === 0) {
+  group3Results.innerHTML = '<tr><td colspan="6" style="padding:12px;text-align:center;">No qualifying stocks in Group 3 today.</td></tr>';
+}
       
     
 
