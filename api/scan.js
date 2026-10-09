@@ -179,7 +179,7 @@ export default async function handler(req, res) {
         const orbLow = Math.min(
           ...openingRangeCandles.map(candle => Number(candle[3]))
         );
-
+      
         /*
          * Previous trading day's OHLC
          */
@@ -246,7 +246,39 @@ export default async function handler(req, res) {
           orbLow < orbHigh &&
           orbHigh < r3;
 
-        if (matches) {
+        
+
+               if (matches) {
+
+          /*
+           * Find the completed 9:30–9:31 AM candle
+           */
+          const candle930 = candles.find(candle =>
+            candle[0] >= `${today}T09:30:00+05:30` &&
+            candle[0] < `${today}T09:31:00+05:30`
+          );
+
+          if (!candle930) {
+            errors.push({
+              symbol: stock.symbol,
+              stage: "930-candle",
+              message: "9:30 AM candle not available yet"
+            });
+            continue;
+          }
+
+          const close930 = Number(candle930[4]);
+
+          let group;
+
+          if (close930 > orbHigh) {
+            group = "Group 1 - Above ORB High";
+          } else if (close930 < orbLow) {
+            group = "Group 2 - Below ORB Low";
+          } else {
+            group = "Group 3 - Between ORB High and ORB Low";
+          }
+        
           results.push({
             symbol: stock.symbol,
             instrumentKey,
@@ -256,9 +288,12 @@ export default async function handler(req, res) {
             s3,
             orbLow,
             orbHigh,
-            r3
+            r3,
+            close930,
+            group
           });
         }
+       
 
       } catch (error) {
         errors.push({
