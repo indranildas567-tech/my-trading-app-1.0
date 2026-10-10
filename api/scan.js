@@ -1,5 +1,3 @@
-
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({
@@ -24,7 +22,14 @@ export default async function handler(req, res) {
         timeZone: "Asia/Kolkata"
       });
 
-    const limit = Math.min(Number(req.query.limit || 5), 500);
+    const requestedLimit = Number(req.query.limit || 5);
+    const limit = Math.max(
+      1,
+      Math.min(
+        Number.isFinite(requestedLimit) ? requestedLimit : 5,
+        500
+      )
+    );
 
     const csvUrl =
       "https://raw.githubusercontent.com/indranildas567-tech/my-trading-app-1.0/main/ind_nifty500list.csv";
@@ -45,7 +50,7 @@ export default async function handler(req, res) {
       .map(line => line.trim())
       .filter(Boolean);
 
-    const parseCSVLine = (line) => {
+    const parseCSVLine = line => {
       const values = [];
       let value = "";
       let insideQuotes = false;
@@ -69,9 +74,15 @@ export default async function handler(req, res) {
       }
 
       values.push(value.trim());
-
       return values;
     };
+
+    if (lines.length < 2) {
+      return res.status(500).json({
+        ok: false,
+        message: "NIFTY 500 CSV is empty or incomplete"
+      });
+    }
 
     const headers = parseCSVLine(lines[0]).map(header =>
       header.trim()
@@ -83,7 +94,8 @@ export default async function handler(req, res) {
     if (symbolIndex === -1 || isinIndex === -1) {
       return res.status(500).json({
         ok: false,
-        message: "CSV does not contain Symbol and ISIN Code columns"
+        message:
+          "CSV does not contain Symbol and ISIN Code columns"
       });
     }
 
@@ -104,7 +116,10 @@ export default async function handler(req, res) {
     const errors = [];
 
     const getPreviousDate = (dateString, daysBack) => {
-      const date = new Date(`${dateString}T00:00:00+05:30`);
+      const date = new Date(
+        `${dateString}T00:00:00+05:30`
+      );
+
       date.setDate(date.getDate() - daysBack);
 
       return date.toLocaleDateString("en-CA", {
@@ -114,33 +129,98 @@ export default async function handler(req, res) {
 
     const previousStartDate = getPreviousDate(today, 7);
 
-    for (const stock of stocks) {
+    /*
+     * SPEED IMPROVEMENT:
+     * Space Upstox requests by at least 125 ms.
+     * This targets no more than 8 request starts per second
+     * for this scanner invocation.
+     */
+    const REQUEST_INTERVAL_MS = 125;
+
+const wait = ms =>
+  new Promise(resolve => setTimeout(resolve, ms));
+
+let requestStartQueue = Promise.resolve();
+let lastRequestStartedAt = 0;
+
+const fetchUpstoxJson = async url => {
+  let releaseTurn;
+
+  const currentTurn = new Promise(resolve => {
+    releaseTurn = resolve;
+  });
+
+  const previousTurn = requestStartQueue;
+  requestStartQueue = currentTurn;
+
+  let response;
+
+  try {
+    await previousTurn;
+
+    const elapsed = Date.now() - lastRequestStartedAt;
+
+    if (
+      lastRequestStartedAt > 0 &&
+      elapsed < REQUEST_INTERVAL_MS
+    ) {
+      await wait(REQUEST_INTERVAL_MS - elapsed);
+    }
+
+    lastRequestStartedAt = Date.now();
+
+    response = fetch(url, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`
+      }
+    });
+  } finally {
+    releaseTurn();
+  }
+
+  const resolvedResponse = await response;
+
+  let data;
+
+  try {
+    data = await resolvedResponse.json();
+  } catch {
+    data = {
+      message: "Upstox returned an invalid JSON response"
+    };
+  }
+
+  return {
+    response: resolvedResponse,
+    data
+  };
+};
+    const processStock = async stock => {
       const instrumentKey = `NSE_EQ|${stock.isin}`;
 
       try {
         /*
          * Today's 1-minute candles
          */
-        const minuteUrl =
+        const isToday =
           today ===
           new Date().toLocaleDateString("en-CA", {
             timeZone: "Asia/Kolkata"
-          })
-            ? `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(
-                instrumentKey
-              )}/minutes/1`
-            : `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(
-                instrumentKey
-              )}/minutes/1/${today}/${today}`;
+          });
 
-        const minuteResponse = await fetch(minuteUrl, {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`
-          }
-        });
+        const minuteUrl = isToday
+          ? `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(
+              instrumentKey
+            )}/minutes/1`
+          : `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(
+              instrumentKey
+            )}/minutes/1/${today}/${today}`;
 
-        const minuteData = await minuteResponse.json();
+        const {
+          response: minuteResponse,
+          data: minuteData
+        } = await fetchUpstoxJson(minuteUrl);
 
         if (!minuteResponse.ok) {
           errors.push({
@@ -148,7 +228,8 @@ export default async function handler(req, res) {
             stage: "1-minute-data",
             data: minuteData
           });
-          continue;
+
+          return;
         }
 
         const candles = minuteData.data?.candles || [];
@@ -169,33 +250,34 @@ export default async function handler(req, res) {
             message:
               `Expected 15 candles but received ${openingRangeCandles.length}`
           });
-          continue;
+
+          return;
         }
 
         const orbHigh = Math.max(
-          ...openingRangeCandles.map(candle => Number(candle[2]))
+          ...openingRangeCandles.map(candle =>
+            Number(candle[2])
+          )
         );
 
         const orbLow = Math.min(
-          ...openingRangeCandles.map(candle => Number(candle[3]))
+          ...openingRangeCandles.map(candle =>
+            Number(candle[3])
+          )
         );
-      
+
         /*
          * Previous trading day's OHLC
          */
-        const dailyResponse = await fetch(
+        const dailyUrl =
           `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(
             instrumentKey
-          )}/days/1/${today}/${previousStartDate}`,
-          {
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
+          )}/days/1/${today}/${previousStartDate}`;
 
-        const dailyData = await dailyResponse.json();
+        const {
+          response: dailyResponse,
+          data: dailyData
+        } = await fetchUpstoxJson(dailyUrl);
 
         if (!dailyResponse.ok) {
           errors.push({
@@ -203,14 +285,15 @@ export default async function handler(req, res) {
             stage: "daily-data",
             data: dailyData
           });
-          continue;
+
+          return;
         }
 
         const dailyCandles = dailyData.data?.candles || [];
 
-        const previousCandle = dailyCandles.find(candle => {
-          return candle[0] < `${today}T00:00:00+05:30`;
-        });
+        const previousCandle = dailyCandles.find(candle =>
+          candle[0] < `${today}T00:00:00+05:30`
+        );
 
         if (!previousCandle) {
           errors.push({
@@ -218,7 +301,8 @@ export default async function handler(req, res) {
             stage: "previous-day",
             message: "Previous trading day candle not found"
           });
-          continue;
+
+          return;
         }
 
         const previousHigh = Number(previousCandle[2]);
@@ -238,7 +322,6 @@ export default async function handler(req, res) {
 
         /*
          * Required strategy:
-         *
          * S3 < ORB Low < ORB High < R3
          */
         const matches =
@@ -246,54 +329,53 @@ export default async function handler(req, res) {
           orbLow < orbHigh &&
           orbHigh < r3;
 
-        
-
-               if (matches) {
-
-          /*
-           * Find the completed 9:30–9:31 AM candle
-           */
-          const candle930 = candles.find(candle =>
-            candle[0] >= `${today}T09:30:00+05:30` &&
-            candle[0] < `${today}T09:31:00+05:30`
-          );
-
-          if (!candle930) {
-            errors.push({
-              symbol: stock.symbol,
-              stage: "930-candle",
-              message: "9:30 AM candle not available yet"
-            });
-            continue;
-          }
-
-          const close930 = Number(candle930[4]);
-
-          let group;
-
-          if (close930 > orbHigh) {
-            group = "Group 1 - Above ORB High";
-          } else if (close930 < orbLow) {
-            group = "Group 2 - Below ORB Low";
-          } else {
-            group = "Group 3 - Between ORB High and ORB Low";
-          }
-        
-          results.push({
-            symbol: stock.symbol,
-            instrumentKey,
-            previousHigh,
-            previousLow,
-            previousClose,
-            s3,
-            orbLow,
-            orbHigh,
-            r3,
-            close930,
-            group
-          });
+        if (!matches) {
+          return;
         }
-       
+
+        /*
+         * Find the completed 9:30–9:31 AM candle.
+         */
+        const candle930 = candles.find(candle =>
+          candle[0] >= `${today}T09:30:00+05:30` &&
+          candle[0] < `${today}T09:31:00+05:30`
+        );
+
+        if (!candle930) {
+          errors.push({
+            symbol: stock.symbol,
+            stage: "930-candle",
+            message: "9:30 AM candle not available yet"
+          });
+
+          return;
+        }
+
+        const close930 = Number(candle930[4]);
+
+        let group;
+
+        if (close930 > orbHigh) {
+          group = "Group 1 - Above ORB High";
+        } else if (close930 < orbLow) {
+          group = "Group 2 - Below ORB Low";
+        } else {
+          group = "Group 3 - Between ORB High and ORB Low";
+        }
+
+        results.push({
+          symbol: stock.symbol,
+          instrumentKey,
+          previousHigh,
+          previousLow,
+          previousClose,
+          s3,
+          orbLow,
+          orbHigh,
+          r3,
+          close930,
+          group
+        });
 
       } catch (error) {
         errors.push({
@@ -302,7 +384,38 @@ export default async function handler(req, res) {
           message: error.message
         });
       }
-    }
+    };
+
+    /*
+     * SPEED IMPROVEMENT:
+     * Run up to five stock-processing workers concurrently.
+     */
+    const WORKER_COUNT = 5;
+    let nextStockIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        const index = nextStockIndex++;
+
+        if (index >= stocks.length) {
+          return;
+        }
+
+        await processStock(stocks[index]);
+      }
+    };
+
+    const activeWorkers = Math.min(
+      WORKER_COUNT,
+      stocks.length
+    );
+
+    await Promise.all(
+      Array.from(
+        { length: activeWorkers },
+        () => worker()
+      )
+    );
 
     return res.status(200).json({
       ok: true,
