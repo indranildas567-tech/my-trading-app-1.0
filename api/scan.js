@@ -22,14 +22,22 @@ export default async function handler(req, res) {
         timeZone: "Asia/Kolkata"
       });
 
-    const requestedLimit = Number(req.query.limit || 5);
-    const limit = Math.max(
-      1,
-      Math.min(
-        Number.isFinite(requestedLimit) ? requestedLimit : 5,
-        500
-      )
-    );
+const requestedLimit = Number(req.query.limit || 50);
+const limit = Math.max(
+  1,
+  Math.min(
+    Number.isFinite(requestedLimit) ? requestedLimit : 50,
+    50
+  )
+);
+
+const requestedOffset = Number(req.query.offset || 0);
+const offset = Math.max(
+  0,
+  Number.isFinite(requestedOffset) ? requestedOffset : 0
+);
+
+
 
     const csvUrl =
       "https://raw.githubusercontent.com/indranildas567-tech/my-trading-app-1.0/main/ind_nifty500list.csv";
@@ -110,7 +118,7 @@ export default async function handler(req, res) {
         };
       })
       .filter(stock => stock.symbol && stock.isin)
-      .slice(0, limit);
+      .slice(offset, offset + limit);
 
     const results = [];
     const errors = [];
@@ -422,6 +430,8 @@ const fetchUpstoxJson = async url => {
       status: "scanner_test_complete",
       date: today,
       stocksChecked: stocks.length,
+      offset,
+limit,
       condition: "S3 < ORB Low < ORB High < R3",
       openingRange: "09:15–09:30 IST",
       camarilla: "Standard",
