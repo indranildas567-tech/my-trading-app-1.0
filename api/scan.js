@@ -135,7 +135,7 @@ export default async function handler(req, res) {
      * This targets no more than 8 request starts per second
      * for this scanner invocation.
      */
-    const REQUEST_INTERVAL_MS = 125;
+    const REQUEST_INTERVAL_MS = 1000;
 
 const wait = ms =>
   new Promise(resolve => setTimeout(resolve, ms));
@@ -390,7 +390,7 @@ const fetchUpstoxJson = async url => {
      * SPEED IMPROVEMENT:
      * Run up to five stock-processing workers concurrently.
      */
-    const WORKER_COUNT = 5;
+    const WORKER_COUNT = 2;
     let nextStockIndex = 0;
 
     const worker = async () => {
