@@ -81,27 +81,40 @@ group2Results.innerHTML = "";
 group3Results.innerHTML = "";
 
     try {
-      const response = await fetch("/api/scan?limit=500", {
-        method: "GET",
-        headers: { "Accept": "application/json" }
-      });
 
-      const data = await response.json();
+      const stocks = [];
+      const allErrors = [];
+      const batchSize = 50;
 
-      if (!response.ok || !data.ok) {
-        throw new Error(data.message || "Scanner request failed.");
+      for (let offset = 0; offset < 500; offset += batchSize) {
+        status.textContent =
+          `Scanning stocks ${offset + 1}–${Math.min(offset + batchSize, 500)} of 500...`;
+
+        const response = await fetch(
+          `/api/scan?limit=${batchSize}&offset=${offset}`,
+          {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data.message || "Scanner request failed.");
+        }
+
+        stocks.push(...(data.matches || []));
+        allErrors.push(...(data.errors || []));
       }
+  if (stocks.length === 0) {
+    status.textContent = "Scan completed. No matching stocks found.";
+    group1Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
+    group2Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
+    group3Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
+    return;
+  }
 
-      const stocks = data.matches || [];
-
-      if (stocks.length === 0) {
-        status.textContent = "Scan completed. No matching stocks found.";
-        results.innerHTML =
-          group1Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
-group2Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
-group3Results.innerHTML = '<tr><td colspan="6">No matching stocks.</td></tr>';
-        return;
-      }
 
       stocks.forEach(function (stock) {
   let target;
