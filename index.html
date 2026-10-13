@@ -86,9 +86,9 @@ group3Results.innerHTML = "";
       const allErrors = [];
       const batchSize = 50;
 
-      for (let offset = 0; offset < 500; offset += batchSize) {
+      for (let offset = 0; offset < 501; offset += batchSize) {
         status.textContent =
-          `Scanning stocks ${offset + 1}–${Math.min(offset + batchSize, 500)} of 500...`;
+          `Scanning stocks ${offset + 1}–${Math.min(offset + batchSize, 501)} of 501...`;
 
         const response = await fetch(
           `/api/scan?limit=${batchSize}&offset=${offset}`,
