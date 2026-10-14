@@ -199,7 +199,7 @@ export default async function handler(req, res) {
      * Sequential requests are slower, but avoid launching
      * many simultaneous requests against Upstox.
      */
-    const REQUEST_INTERVAL_MS = 1100;
+    const REQUEST_INTERVAL_MS = 500;
     const MAX_ATTEMPTS = 3;
 
     let lastRequestStartedAt = 0;
