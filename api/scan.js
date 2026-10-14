@@ -191,34 +191,46 @@ export default async function handler(req, res) {
     };
 
     const previousStartDate = getPreviousDate(today, 7);
-
     /*
-     * Keep requests sequential.
+     * Shared request scheduler.
+     * Maintain at least 200 ms between Upstox request starts,
+     * including when multiple workers are used.
      * Retry temporary HTTP 429 and 5xx errors.
-     *
-     * Sequential requests are slower, but avoid launching
-     * many simultaneous requests against Upstox.
      */
     const REQUEST_INTERVAL_MS = 200;
     const MAX_ATTEMPTS = 3;
 
-    let lastRequestStartedAt = 0;
+    let nextRequestAllowedAt = 0;
+    let requestQueue = Promise.resolve();
+
+    const waitForRequestSlot = () => {
+      const scheduled = requestQueue.then(async () => {
+        const delay = Math.max(
+          0,
+          nextRequestAllowedAt - Date.now()
+        );
+
+        if (delay > 0) {
+          await wait(delay);
+        }
+
+        nextRequestAllowedAt =
+          Date.now() + REQUEST_INTERVAL_MS;
+      });
+
+      requestQueue = scheduled.catch(() => {});
+      return scheduled;
+    };
 
     const fetchUpstoxJson = async url => {
       let lastResult = null;
 
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const elapsed =
-          Date.now() - lastRequestStartedAt;
-
-        if (
-          lastRequestStartedAt > 0 &&
-          elapsed < REQUEST_INTERVAL_MS
-        ) {
-          await wait(REQUEST_INTERVAL_MS - elapsed);
-        }
-
-        lastRequestStartedAt = Date.now();
+      for (
+        let attempt = 1;
+        attempt <= MAX_ATTEMPTS;
+        attempt++
+      ) {
+        await waitForRequestSlot();
 
         let response;
         let data;
@@ -244,7 +256,8 @@ export default async function handler(req, res) {
             ok: false,
             status: 0,
             data: {
-              message: error.message || "Network request failed"
+              message:
+                error.message || "Network request failed"
             }
           };
 
@@ -294,9 +307,13 @@ export default async function handler(req, res) {
     };
 
     /*
-     * Process stocks one at a time.
+     * Process stocks using two workers.
+     * The shared scheduler controls Upstox request timing.
      */
-    for (const stock of stocks) {
+    const WORKER_COUNT = 2;
+    let nextStockIndex = 0;
+
+    const processStock = async stock => {
       const instrumentKey = `NSE_EQ|${stock.isin}`;
 
       try {
@@ -325,7 +342,7 @@ export default async function handler(req, res) {
               "Unable to retrieve minute candles"
           });
 
-          continue;
+          return;
         }
 
         const candles =
@@ -333,8 +350,7 @@ export default async function handler(req, res) {
 
         /*
          * 2. Calculate the 09:15–09:30 opening range.
-         * The range uses the 15 candles from 09:15
-         * through 09:29, excluding the 09:30 candle.
+         * Use the 15 candles from 09:15 through 09:29.
          */
         const openingRangeCandles = candles.filter(
           candle => {
@@ -355,7 +371,7 @@ export default async function handler(req, res) {
               `Expected 15 candles; received ${openingRangeCandles.length}`
           });
 
-          continue;
+          return;
         }
 
         const orbHigh = Math.max(
@@ -390,7 +406,7 @@ export default async function handler(req, res) {
               "Unable to retrieve daily candles"
           });
 
-          continue;
+          return;
         }
 
         const dailyCandles =
@@ -414,7 +430,7 @@ export default async function handler(req, res) {
             message: "Previous trading day candle not found"
           });
 
-          continue;
+          return;
         }
 
         const previousHigh = Number(previousCandle[2]);
@@ -441,7 +457,7 @@ export default async function handler(req, res) {
           orbHigh < r3;
 
         if (!matches) {
-          continue;
+          return;
         }
 
         /*
@@ -459,7 +475,7 @@ export default async function handler(req, res) {
             message: "09:30 candle is not available"
           });
 
-          continue;
+          return;
         }
 
         const close930 = Number(candle930[4]);
@@ -495,7 +511,30 @@ export default async function handler(req, res) {
           message: error.message || "Unexpected error"
         });
       }
-    }
+    };
+
+    /*
+     * Run two workers without starting more than two stocks
+     * at once. All Upstox requests use the shared scheduler.
+     */
+    await Promise.all(
+      Array.from(
+        {
+          length: Math.min(WORKER_COUNT, stocks.length)
+        },
+        async () => {
+          while (true) {
+            const index = nextStockIndex++;
+
+            if (index >= stocks.length) {
+              return;
+            }
+
+            await processStock(stocks[index]);
+          }
+        }
+      )
+    );
 
     return res.status(200).json({
       ok: true,
