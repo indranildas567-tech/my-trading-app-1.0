@@ -166,12 +166,12 @@ export default async function handler(req, res) {
           isin: columns[isinIndex]?.trim()
         };
       })
-      .filter(stock =>
-        stock.symbol &&
-        stock.isin &&
-        /^[A-Z0-9]+$/i.test(stock.isin)
-      );
-
+    .filter(stock =>
+      stock.symbol &&
+      stock.isin &&
+      stock.symbol !== "DUMMYHEG" &&
+      /^[A-Z0-9]+$/i.test(stock.isin)
+    );
     const stocks = allStocks.slice(offset, offset + limit);
 
     const results = [];
