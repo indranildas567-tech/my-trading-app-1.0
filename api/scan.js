@@ -15,30 +15,79 @@ export default async function handler(req, res) {
     });
   }
 
+  const wait = ms =>
+    new Promise(resolve => setTimeout(resolve, ms));
+
+  const getTodayIST = () =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+
+  const getTimeIST = () =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).format(new Date());
+
   try {
-    const today =
-      req.query.date ||
-      new Date().toLocaleDateString("en-CA", {
-        timeZone: "Asia/Kolkata"
+    const today = req.query.date || getTodayIST();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Invalid date. Use YYYY-MM-DD."
       });
+    }
 
-const requestedLimit = Number(req.query.limit || 50);
-const limit = Math.max(
-  1,
-  Math.min(
-    Number.isFinite(requestedLimit) ? requestedLimit : 50,
-    50
-  )
-);
+    const requestedLimit = Number(req.query.limit || 50);
+    const limit = Math.max(
+      1,
+      Math.min(
+        Number.isFinite(requestedLimit)
+          ? Math.floor(requestedLimit)
+          : 50,
+        50
+      )
+    );
 
-const requestedOffset = Number(req.query.offset || 0);
-const offset = Math.max(
-  0,
-  Number.isFinite(requestedOffset) ? requestedOffset : 0
-);
+    const requestedOffset = Number(req.query.offset || 0);
+    const offset = Math.max(
+      0,
+      Number.isFinite(requestedOffset)
+        ? Math.floor(requestedOffset)
+        : 0
+    );
 
+    /*
+     * Do not classify today's stocks until the 09:30
+     * one-minute candle has had time to complete.
+     */
+    if (
+      today === getTodayIST() &&
+      getTimeIST() < "09:31"
+    ) {
+      return res.status(200).json({
+        ok: true,
+        status: "waiting_for_930_candle",
+        date: today,
+        message:
+          "Scanning can begin after the 09:30 candle closes at 09:31 IST.",
+        stocksChecked: 0,
+        matches: [],
+        matchCount: 0,
+        errors: []
+      });
+    }
 
-
+    /*
+     * Load the NIFTY 500 list.
+     * Keep the source CSV on the original main branch.
+     */
     const csvUrl =
       "https://raw.githubusercontent.com/indranildas567-tech/my-trading-app-1.0/main/ind_nifty500list.csv";
 
@@ -93,7 +142,7 @@ const offset = Math.max(
     }
 
     const headers = parseCSVLine(lines[0]).map(header =>
-      header.trim()
+      header.replace(/^\uFEFF/, "").trim()
     );
 
     const symbolIndex = headers.indexOf("Symbol");
@@ -103,11 +152,11 @@ const offset = Math.max(
       return res.status(500).json({
         ok: false,
         message:
-          "CSV does not contain Symbol and ISIN Code columns"
+          "CSV must contain Symbol and ISIN Code columns"
       });
     }
 
-    const stocks = lines
+    const allStocks = lines
       .slice(1)
       .map(line => {
         const columns = parseCSVLine(line);
@@ -117,105 +166,161 @@ const offset = Math.max(
           isin: columns[isinIndex]?.trim()
         };
       })
-      .filter(stock => stock.symbol && stock.isin)
-      .slice(offset, offset + limit);
+    .filter(stock =>
+      stock.symbol &&
+      stock.isin &&
+      stock.symbol !== "DUMMYHEG" &&
+      /^[A-Z0-9]+$/i.test(stock.isin)
+    );
+    const stocks = allStocks.slice(offset, offset + limit);
 
     const results = [];
     const errors = [];
 
+    /*
+     * Find a date seven calendar days earlier.
+     */
     const getPreviousDate = (dateString, daysBack) => {
       const date = new Date(
         `${dateString}T00:00:00+05:30`
       );
 
-      date.setDate(date.getDate() - daysBack);
+      date.setUTCDate(date.getUTCDate() - daysBack);
 
-      return date.toLocaleDateString("en-CA", {
-        timeZone: "Asia/Kolkata"
-      });
+      return date.toISOString().slice(0, 10);
     };
 
     const previousStartDate = getPreviousDate(today, 7);
+    /*
+     * Shared request scheduler.
+     * Maintain at least 200 ms between Upstox request starts,
+     * including when multiple workers are used.
+     * Retry temporary HTTP 429 and 5xx errors.
+     */
+    const REQUEST_INTERVAL_MS = 200;
+    const MAX_ATTEMPTS = 3;
+
+    let nextRequestAllowedAt = 0;
+    let requestQueue = Promise.resolve();
+
+    const waitForRequestSlot = () => {
+      const scheduled = requestQueue.then(async () => {
+        const delay = Math.max(
+          0,
+          nextRequestAllowedAt - Date.now()
+        );
+
+        if (delay > 0) {
+          await wait(delay);
+        }
+
+        nextRequestAllowedAt =
+          Date.now() + REQUEST_INTERVAL_MS;
+      });
+
+      requestQueue = scheduled.catch(() => {});
+      return scheduled;
+    };
+
+    const fetchUpstoxJson = async url => {
+      let lastResult = null;
+
+      for (
+        let attempt = 1;
+        attempt <= MAX_ATTEMPTS;
+        attempt++
+      ) {
+        await waitForRequestSlot();
+
+        let response;
+        let data;
+
+        try {
+          response = await fetch(url, {
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            signal: AbortSignal.timeout(20000)
+          });
+
+          try {
+            data = await response.json();
+          } catch {
+            data = {
+              message: "Invalid JSON response from Upstox"
+            };
+          }
+        } catch (error) {
+          lastResult = {
+            ok: false,
+            status: 0,
+            data: {
+              message:
+                error.message || "Network request failed"
+            }
+          };
+
+          if (attempt < MAX_ATTEMPTS) {
+            await wait(1000 * attempt);
+            continue;
+          }
+
+          return lastResult;
+        }
+
+        if (response.ok) {
+          return {
+            ok: true,
+            status: response.status,
+            data
+          };
+        }
+
+        lastResult = {
+          ok: false,
+          status: response.status,
+          data
+        };
+
+        const shouldRetry =
+          response.status === 429 ||
+          response.status >= 500;
+
+        if (!shouldRetry || attempt === MAX_ATTEMPTS) {
+          return lastResult;
+        }
+
+        const retryAfter = Number(
+          response.headers.get("Retry-After")
+        );
+
+        const delay =
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? Math.min(retryAfter * 1000, 30000)
+            : 2000 * attempt;
+
+        await wait(delay);
+      }
+
+      return lastResult;
+    };
 
     /*
-     * SPEED IMPROVEMENT:
-     * Space Upstox requests by at least 125 ms.
-     * This targets no more than 8 request starts per second
-     * for this scanner invocation.
+     * Process stocks using two workers.
+     * The shared scheduler controls Upstox request timing.
      */
-    const REQUEST_INTERVAL_MS = 1000;
+    const WORKER_COUNT = 2;
+    let nextStockIndex = 0;
 
-const wait = ms =>
-  new Promise(resolve => setTimeout(resolve, ms));
-
-let requestStartQueue = Promise.resolve();
-let lastRequestStartedAt = 0;
-
-const fetchUpstoxJson = async url => {
-  let releaseTurn;
-
-  const currentTurn = new Promise(resolve => {
-    releaseTurn = resolve;
-  });
-
-  const previousTurn = requestStartQueue;
-  requestStartQueue = currentTurn;
-
-  let response;
-
-  try {
-    await previousTurn;
-
-    const elapsed = Date.now() - lastRequestStartedAt;
-
-    if (
-      lastRequestStartedAt > 0 &&
-      elapsed < REQUEST_INTERVAL_MS
-    ) {
-      await wait(REQUEST_INTERVAL_MS - elapsed);
-    }
-
-    lastRequestStartedAt = Date.now();
-
-    response = fetch(url, {
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`
-      }
-    });
-  } finally {
-    releaseTurn();
-  }
-
-  const resolvedResponse = await response;
-
-  let data;
-
-  try {
-    data = await resolvedResponse.json();
-  } catch {
-    data = {
-      message: "Upstox returned an invalid JSON response"
-    };
-  }
-
-  return {
-    response: resolvedResponse,
-    data
-  };
-};
     const processStock = async stock => {
       const instrumentKey = `NSE_EQ|${stock.isin}`;
 
       try {
         /*
-         * Today's 1-minute candles
+         * 1. Retrieve one-minute candles.
          */
-        const isToday =
-          today ===
-          new Date().toLocaleDateString("en-CA", {
-            timeZone: "Asia/Kolkata"
-          });
+        const isToday = today === getTodayIST();
 
         const minuteUrl = isToday
           ? `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(
@@ -225,38 +330,45 @@ const fetchUpstoxJson = async url => {
               instrumentKey
             )}/minutes/1/${today}/${today}`;
 
-        const {
-          response: minuteResponse,
-          data: minuteData
-        } = await fetchUpstoxJson(minuteUrl);
+        const minuteResult =
+          await fetchUpstoxJson(minuteUrl);
 
-        if (!minuteResponse.ok) {
+        if (!minuteResult.ok) {
           errors.push({
             symbol: stock.symbol,
             stage: "1-minute-data",
-            data: minuteData
+            status: minuteResult.status,
+            message: minuteResult.data?.message ||
+              "Unable to retrieve minute candles"
           });
 
           return;
         }
 
-        const candles = minuteData.data?.candles || [];
+        const candles =
+          minuteResult.data?.data?.candles || [];
 
-        const openingRangeCandles = candles.filter(candle => {
-          const time = candle[0];
+        /*
+         * 2. Calculate the 09:15–09:30 opening range.
+         * Use the 15 candles from 09:15 through 09:29.
+         */
+        const openingRangeCandles = candles.filter(
+          candle => {
+            const time = candle[0];
 
-          return (
-            time >= `${today}T09:15:00+05:30` &&
-            time < `${today}T09:30:00+05:30`
-          );
-        });
+            return (
+              time >= `${today}T09:15:00+05:30` &&
+              time < `${today}T09:30:00+05:30`
+            );
+          }
+        );
 
         if (openingRangeCandles.length !== 15) {
           errors.push({
             symbol: stock.symbol,
             stage: "opening-range",
             message:
-              `Expected 15 candles but received ${openingRangeCandles.length}`
+              `Expected 15 candles; received ${openingRangeCandles.length}`
           });
 
           return;
@@ -275,33 +387,41 @@ const fetchUpstoxJson = async url => {
         );
 
         /*
-         * Previous trading day's OHLC
+         * 3. Retrieve previous daily candles.
          */
         const dailyUrl =
           `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(
             instrumentKey
           )}/days/1/${today}/${previousStartDate}`;
 
-        const {
-          response: dailyResponse,
-          data: dailyData
-        } = await fetchUpstoxJson(dailyUrl);
+        const dailyResult =
+          await fetchUpstoxJson(dailyUrl);
 
-        if (!dailyResponse.ok) {
+        if (!dailyResult.ok) {
           errors.push({
             symbol: stock.symbol,
             stage: "daily-data",
-            data: dailyData
+            status: dailyResult.status,
+            message: dailyResult.data?.message ||
+              "Unable to retrieve daily candles"
           });
 
           return;
         }
 
-        const dailyCandles = dailyData.data?.candles || [];
+        const dailyCandles =
+          dailyResult.data?.data?.candles || [];
 
-        const previousCandle = dailyCandles.find(candle =>
-          candle[0] < `${today}T00:00:00+05:30`
-        );
+        const previousCandles = dailyCandles
+          .filter(candle =>
+            candle[0] < `${today}T00:00:00+05:30`
+          )
+          .sort((a, b) =>
+            new Date(b[0]).getTime() -
+            new Date(a[0]).getTime()
+          );
+
+        const previousCandle = previousCandles[0];
 
         if (!previousCandle) {
           errors.push({
@@ -318,7 +438,7 @@ const fetchUpstoxJson = async url => {
         const previousClose = Number(previousCandle[4]);
 
         /*
-         * Standard Camarilla S3 / R3
+         * 4. Standard Camarilla S3 / R3.
          */
         const range = previousHigh - previousLow;
 
@@ -329,8 +449,7 @@ const fetchUpstoxJson = async url => {
           previousClose - (range * 1.1) / 4;
 
         /*
-         * Required strategy:
-         * S3 < ORB Low < ORB High < R3
+         * 5. Apply the exact strategy condition.
          */
         const matches =
           s3 < orbLow &&
@@ -342,7 +461,7 @@ const fetchUpstoxJson = async url => {
         }
 
         /*
-         * Find the completed 9:30–9:31 AM candle.
+         * 6. Read the 09:30–09:31 candle.
          */
         const candle930 = candles.find(candle =>
           candle[0] >= `${today}T09:30:00+05:30` &&
@@ -353,7 +472,7 @@ const fetchUpstoxJson = async url => {
           errors.push({
             symbol: stock.symbol,
             stage: "930-candle",
-            message: "9:30 AM candle not available yet"
+            message: "09:30 candle is not available"
           });
 
           return;
@@ -389,54 +508,54 @@ const fetchUpstoxJson = async url => {
         errors.push({
           symbol: stock.symbol,
           stage: "unexpected-error",
-          message: error.message
+          message: error.message || "Unexpected error"
         });
       }
     };
 
     /*
-     * SPEED IMPROVEMENT:
-     * Run up to five stock-processing workers concurrently.
+     * Run two workers without starting more than two stocks
+     * at once. All Upstox requests use the shared scheduler.
      */
-    const WORKER_COUNT = 2;
-    let nextStockIndex = 0;
-
-    const worker = async () => {
-      while (true) {
-        const index = nextStockIndex++;
-
-        if (index >= stocks.length) {
-          return;
-        }
-
-        await processStock(stocks[index]);
-      }
-    };
-
-    const activeWorkers = Math.min(
-      WORKER_COUNT,
-      stocks.length
-    );
-
     await Promise.all(
       Array.from(
-        { length: activeWorkers },
-        () => worker()
+        {
+          length: Math.min(WORKER_COUNT, stocks.length)
+        },
+        async () => {
+          while (true) {
+            const index = nextStockIndex++;
+
+            if (index >= stocks.length) {
+              return;
+            }
+
+            await processStock(stocks[index]);
+          }
+        }
       )
     );
 
     return res.status(200).json({
       ok: true,
-      status: "scanner_test_complete",
+      status: "scanner_batch_complete",
       date: today,
+      totalStocks: allStocks.length,
       stocksChecked: stocks.length,
       offset,
-limit,
+      limit,
+      nextOffset:
+        offset + stocks.length < allStocks.length
+          ? offset + stocks.length
+          : null,
+      hasMore:
+        offset + stocks.length < allStocks.length,
       condition: "S3 < ORB Low < ORB High < R3",
       openingRange: "09:15–09:30 IST",
       camarilla: "Standard",
       matches: results,
       matchCount: results.length,
+      errorCount: errors.length,
       errors
     });
 
@@ -444,7 +563,7 @@ limit,
     return res.status(500).json({
       ok: false,
       message: "Scanner failed",
-      error: error.message
+      error: error.message || "Unknown error"
     });
   }
 }
